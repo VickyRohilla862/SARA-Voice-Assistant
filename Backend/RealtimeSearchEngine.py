@@ -15,9 +15,7 @@ GroqAPIKey = env_vars.get('GroqAPIKey')
 client = Groq(api_key = GroqAPIKey)
 
 # define the system instructions for the chatbot
-System = f"""Hello, I am {Username}, You are a very accurate and advanced AI chatbot named {AssistantName} which has real-time up-to-date information from the internet.
-*** Provide Answers In a Professional Way, make sure to add full stops, commas, question marks, and use proper grammar.***
-*** Just answer the question from the provided data in a professional way. ***"""
+System = f""""""
 
 # try to load the chatlog from the json file or create a new one if it doesnt exist
 try:
