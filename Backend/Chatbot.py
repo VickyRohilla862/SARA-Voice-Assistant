@@ -18,7 +18,7 @@ client = Groq(api_key = GroqAPIKey)
 messages = []
 
 # define a system message that provides context to the AI chatbot about the role and behaviour
-System = f""""""
+System = """"""
 
 # a list of system instructions for the chatbot
 SystemChatBot = [

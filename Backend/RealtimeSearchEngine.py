@@ -15,7 +15,7 @@ GroqAPIKey = env_vars.get('GroqAPIKey')
 client = Groq(api_key = GroqAPIKey)
 
 # define the system instructions for the chatbot
-System = f""""""
+System = """"""
 
 # try to load the chatlog from the json file or create a new one if it doesnt exist
 try:
