@@ -1,5 +1,5 @@
-from AppOpener import close, open as appopen # import functions to open and close apps
-from webbrowser import open as webopen # import webbrowser functionality
+from AppOpener import open as appopen # import functions to open and close apps
+from webbrowser import open # import webbrowser functionality
 from pywhatkit import search, playonyt # import functions for google search and youtube playback
 from dotenv import dotenv_values
 from bs4 import BeautifulSoup # import BeautifulSoup for parsing HTML content
@@ -97,26 +97,23 @@ def PlayYoutube(query):
     return True
 
 #function to open an application or a rellevant webpage
-import re
-import webbrowser
-from AppOpener import open as appopen
 
 def OpenApp(app):
     app = app.strip().lower()
 
-    # 1️⃣ If full URL
+    # If full URL
     if re.match(r'^https?://', app):
         webbrowser.open(app)
         return True
 
-    # 2️⃣ Try desktop application
+    # Try desktop application
     try:
         appopen(app, match_closest=True, output=True, throw_error=True)
         return True
     except:
         pass
 
-    # 3️⃣ MAGIC: DuckDuckGo !ducky → opens FIRST website directly
+    # MAGIC: DuckDuckGo !ducky → opens FIRST website directly
     webbrowser.open(f"https://duckduckgo.com/?q=!ducky+{app}")
     return True
 
@@ -206,9 +203,6 @@ def System(command):
 async def TranslateAndExecute(commands:list[str]):
     funcs = [] # list to store asynchronous tasks
 
-
-    import re
-
     for command in commands:
         command = command.lower().strip()
 
@@ -287,4 +281,4 @@ async def Automation(command:list[str]):
 
 # main entry point of the program
 if __name__ == '__main__':
-    asyncio.run(Automation(['play farebi on youtube']))
+    asyncio.run(Automation(['close taskmgr']))
