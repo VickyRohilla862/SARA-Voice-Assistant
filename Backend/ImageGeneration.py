@@ -102,8 +102,3 @@ while True:
 
     except Exception as e:
         print(f'Error: {e}')
-
-
-# main entry point for the program
-if __name__ == '__main__':
-    GenerateImages(input(">>> "))
