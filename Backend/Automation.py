@@ -227,11 +227,8 @@ async def TranslateAndExecute(commands:list[str]):
         elif 'unmute' in command:
             command = 'system unmute'
 
-
         elif command.startswith(('write', 'create', 'generate', 'compose')):
             command = 'content ' + command
-
-
 
         if command.startswith('open '): # handle open commands
             if 'open it' in command: # ignore open it commands
