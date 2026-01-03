@@ -1,5 +1,5 @@
 from AppOpener import open as appopen # import functions to open and close apps
-from webbrowser import open # import webbrowser functionality
+import webbrowser # import webbrowser functionality
 from pywhatkit import search, playonyt # import functions for google search and youtube playback
 from dotenv import dotenv_values
 from bs4 import BeautifulSoup # import BeautifulSoup for parsing HTML content
@@ -278,4 +278,4 @@ async def Automation(command:list[str]):
 
 # main entry point of the program
 if __name__ == '__main__':
-    asyncio.run(Automation(['close taskmgr']))
+    asyncio.run(Automation(['decrease the volume by 10']))
