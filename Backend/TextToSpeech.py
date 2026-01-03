@@ -38,7 +38,7 @@ def TTS(Text, func=lambda r=None: True):
             while pygame.mixer.music.get_busy():
                 if func() == False:
                     break
-                pygame.time.Clock().tick(10)
+                pygame.time.Clock().tick(20)
 
             return True
         except Exception as e:
