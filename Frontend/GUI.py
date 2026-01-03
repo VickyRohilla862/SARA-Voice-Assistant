@@ -317,7 +317,7 @@ class CustomTopBar(QWidget):
         layout.addWidget(self.maximize_button)
         layout.addWidget(close_button)
         layout.addWidget(line_frame)
-        self.draggable = False
+        self.draggable = True
         self.offset = None
         
     def paintEvent(self, event):
@@ -332,7 +332,7 @@ class CustomTopBar(QWidget):
         if self.parent().isMaximized():
             self.parent().showNormal()
             self.maximize_button.setIcon(self.maximize_icon)
-            self.draggable = False
+            self.draggable = True
         else:
             self.parent().showMaximized()
             self.maximize_button.setIcon(self.restore_icon)
@@ -386,6 +386,8 @@ class MainWindow(QMainWindow):
         desktop = QApplication.desktop()
         screen_width = desktop.screenGeometry().width()
         screen_height = desktop.screenGeometry().height()
+        self.setWindowTitle(f"{AssistantName} AI Assistant")
+        self.setWindowIcon(QIcon(r'Frontend/Graphics/app_icon.ico'))
         stacked_widget = QStackedWidget(self)
         initial_screen = InitialScreen(self)
         message_screen = MessageScreen(self)
@@ -408,6 +410,7 @@ class MainWindow(QMainWindow):
 
 def GraphicalUserInterface():
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(r'Frontend/Graphics/app_icon.ico'))
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
