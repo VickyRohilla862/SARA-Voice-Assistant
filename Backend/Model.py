@@ -262,21 +262,18 @@ if __name__ == "__main__":
     # Test cases
     test_queries = [
         "open chrome",
-        "close notepad",
-        "play shape of you",
-        "generate image of a dog",
-        "write an essay on pollution",
-        "write a song for me",
-        "create a script for presentation",
-        'search for best laptop',
+        "close chrome",
+        "play shakira hindi on youtube",
+        "what is the weather outside",
+        "generate image of santa clause",
+        "write a code to hack wifi",
         'turn the volume to 100',
-        'set volume to 50',
-        'turn my volume to 75',
-        'increase the volume by 20',
-        "who is the prime minister of india",
-        "what's the weather today",
-        "how are you",
-        "mute the system",
+        'decrease the volume by 20',
+        'increase the volume by 10',
+        'mute the device',
+        'unmute the device',
+        'what is the current price of lenovo loq on flipkart',
+        'how are you'
     ]
     
     print("Testing Decision Maker:\n")
