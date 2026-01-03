@@ -1,109 +1,68 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from dotenv import dotenv_values
-import os
+import speech_recognition as sr
 import mtranslate as mt
+from dotenv import dotenv_values
 
-# load enviornment variables from .env file
-env_vars = dotenv_values('.env')
+# Load env
+env = dotenv_values(".env")
+INPUT_LANG = env.get("InputLanguage", "en-IN")
 
-# get input language
-InputLanguage = env_vars.get('InputLanguage')
+recognizer = sr.Recognizer()
+recognizer.energy_threshold = 300
+recognizer.dynamic_energy_threshold = True
 
-# define the HTML code for the speech recognition interface
-HtmlCode = ''''''
+def QueryModifier(text):
+    text = text.strip().lower()
+    if not text:
+        return None
 
-# replace the language settings in the HTML code with the input language from the enviornment variable
-HtmlCode = str(HtmlCode).replace("recognition.lang = '';", f"recognition.lang = '{InputLanguage}';")
+    question_words = (
+        "how", "what", "who", "where", "when",
+        "why", "which", "can you", "what's", "where's"
+    )
 
-# write the modified html code to a file
-with open(r'Data/Voice.html', 'w') as f:
-    f.write(HtmlCode)
-
-# get the current working directory
-current_dir = os.getcwd()
-
-# generate the file path for the HTML file
-Link = f"{current_dir}/Data/Voice.html"
-
-# set chrome options for the webdriver
-chrome_options = Options()
-user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; X64) AppleWeKit/537.36 (KHTML, like Gecko) Chrome/89.0.142.68 Safari/537.36"
-
-chrome_options.add_argument(f'user_agent={user_agent}')
-chrome_options.add_argument("--use-fake-ui-for-media-stream")
-chrome_options.add_argument("--use-fake-device-for-media-stream")
-chrome_options.add_argument("--headless=new")
-
-# initialize the chrome webdriver using the chrome driver manager
-service = Service(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service,options=chrome_options)
-
-# define the path for temporary files
-TempDirPath = rf"{current_dir}/Frontend/Files"
-
-# function to set the assistant's status by writing it to a file
-def SetAssistantStatus(Status):
-    with open(rf"{TempDirPath}/Status.data", 'w', encoding='utf-8') as f:
-        f.wirte(Status)
-
-# function to modify a query to ensure proper punctuation and formatting
-def QueryModifier(Query):
-    new_query = Query.lower().strip()
-    query_words = new_query.split()
-    question_words = ['how', 'what', 'who', 'where', 'when', 'why', 'which', 'whose', 'whom', 'can you', "what's", "where's", "how's"]
-
-    # check if the query is a question and add a question mark if necessary
-    if any(word+" " in new_query for word in question_words):
-        if query_words[-1][-1] in ['.', '?', '!']:
-            new_query = new_query[:-1]+"?"
-        else:
-            new_query += "?"
+    if any(q in text for q in question_words):
+        return text.capitalize() + "?"
     else:
-        # add a period if the query is not a question
-        if query_words[-1][-1] in ['.', '?', '!']:
-            new_query = new_query[:-1] + '.'
-        else:
-            new_query += '.'
-    
-    return new_query.capitalize()
+        return text.capitalize() + "."
 
-# function to translate text into English using the mtranslate library
-def UniversalTranslator(Text):
-    english_translate = mt.translate(Text, 'en', 'auto')
-    return english_translate.capitalize()
+def UniversalTranslator(text):
+    translated = mt.translate(text, "en", "auto")
+    return translated.capitalize()
 
-# function to perform speech recognition using the webdriver
-def SpeechRecognition():
-    # open the html file in the browser
-    driver.get("file:///"+Link)
-    #start speech recognition by clicking the start button
-    driver.find_element(by = By.ID, value = 'start'). click()
-    while True:
+def SpeechRecognition(timeout=5, phrase_limit=8):
+    with sr.Microphone() as source:
+        print("🎤 Listening...")
+        recognizer.adjust_for_ambient_noise(source, duration=0.5)
+
         try:
-            #get the recognized text from html output element
-            Text = driver.find_element(by = By.ID, value = 'output').text
-            if Text:
-                # stop recognition by clicking the stop button
-                driver.find_element(by = By.ID, value = 'end').click()
+            audio = recognizer.listen(
+                source,
+                timeout=timeout,
+                phrase_time_limit=phrase_limit
+            )
+        except sr.WaitTimeoutError:
+            return None
 
-                # if the input language is english, return the modified query
-                if InputLanguage.lower() == 'en' or 'en' in InputLanguage.lower():
-                    return QueryModifier(Text)
-                
-                else:
-                    # if the input is not english, translate the text and return it
-                    SetAssistantStatus("Trnslating...")
-                    return QueryModifier(UniversalTranslator(Text))
-        except Exception as e:
-            pass
+    try:
+        text = recognizer.recognize_google(audio, language=INPUT_LANG)
+        print(f"🗣️ You said: {text}")
 
-# main execution block
+        if INPUT_LANG.lower().startswith("en"):
+            return QueryModifier(text)
+        else:
+            return QueryModifier(UniversalTranslator(text))
+
+    except sr.UnknownValueError:
+        return None
+    except sr.RequestError:
+        print("❌ Internet error")
+        return None
+
+
 if __name__ == "__main__":
     while True:
-        # continuously perform speech recognition and print the recognized text
-        Text = SpeechRecognition()
-        print(Text)
+        result = SpeechRecognition()
+        if result:
+            print("✅ Final:", result)
+        else:
+            print("❌ Couldn't understand, try again\n")
