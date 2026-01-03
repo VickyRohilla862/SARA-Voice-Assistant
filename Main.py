@@ -17,7 +17,7 @@ Username = env_vars.get('Username')
 AssistantName = env_vars.get('AssistantName')
 DefaultMessage = f'''{Username}: Hello {AssistantName}, How are you?
 {AssistantName}: Welcome {Username}. I am doing well. How may I help you? Do you need anything to know about Environment? Whatever it is. I am always here to help you.'''
-subprocess = []
+process = []
 Functions = ['open', 'close', 'play', 'system', 'content', 'google search', 'youtube search']
 
 def ShowDefaultChatIfNoChats():
@@ -74,6 +74,9 @@ def MainExecution():
     ImageGenerationQuery = ""
     SetAssistantStatus("Listening...")
     Query = SpeechRecognition()
+    if not Query:
+        print("Speech not understood, skipping...")
+        return
     ShowTextToScreen(f'{Username}: {Query}')
     SetAssistantStatus("Thinking...")
     Decision = FirstLayerDMM(Query)
