@@ -278,4 +278,4 @@ async def Automation(command:list[str]):
 
 # main entry point of the program
 if __name__ == '__main__':
-    asyncio.run(Automation(['decrease the volume by 10']))
+    asyncio.run(Automation(['open and search for chaar diwaari on instagram']))
