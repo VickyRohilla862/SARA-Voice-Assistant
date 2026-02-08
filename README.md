@@ -1,20 +1,20 @@
-# 🌟 SARRAH -- Smart AI Voice Assistant 🤖🎙️
+# 🌟 SARA -- Smart AI Voice Assistant 🤖🎙️
 
-> **SARRAH** is a powerful Python-based voice assistant designed to
+> **SARA** is a powerful Python-based voice assistant designed to
 > **listen**, **understand**, **speak**, and **perform tasks
 > intelligently**.\
-> From automation to image generation, SARRAH is built to feel **fast,
+> From automation to image generation, SARA is built to feel **fast,
 > sharp, and futuristic** 🚀
 
 ------------------------------------------------------------------------
 
-## 🔥 What is SARRAH?
+## 🔥 What is SARA?
 
-**SARRAH** stands for a smart, responsive, and intelligent assistant
+**SARA** stands for a smart, responsive, and intelligent assistant
 that interacts with users through **voice commands** and performs
 advanced tasks using AI technologies.
 
-Whether you want to **talk**, **automate**, or **create images**, SARRAH
+Whether you want to **talk**, **automate**, or **create images**, SARA
 has you covered 🎨⚙️
 
 ------------------------------------------------------------------------
@@ -53,7 +53,7 @@ has you covered 🎨⚙️
 
 ------------------------------------------------------------------------
 
-## 🚀 Why Choose SARRAH?
+## 🚀 Why Choose SARA?
 
 ✅ Fully voice-controlled\
 ✅ Multilingual by design\
@@ -75,4 +75,4 @@ If you like this project, give it a ⭐ and share your feedback!
 ------------------------------------------------------------------------
 
 > **"Talk less. Command more."**\
-> --- *SARRAH* 🤖✨
+> --- *SARA* 🤖✨
