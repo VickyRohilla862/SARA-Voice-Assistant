@@ -1,113 +1,290 @@
-from groq import Groq # import the groq library to use AI service
-from json import load, dump # import functions to read and write the json files
+from groq import Groq
+from json import load, dump
 import datetime
 from dotenv import dotenv_values
+import os
+import re
+import threading
+from functools import lru_cache
 
-# load enviornment variables from the .env file
-env_vars = dotenv_values('.env')
-# retrieve specific enviornment variables for username, assistant name and API key
+# ===============================
+# ENVIRONMENT SETUP
+# ===============================
+env_vars = dotenv_values(".env")
 
-Username = env_vars.get('Username')
-AssistantName = env_vars.get('AssistantName')
-GroqAPIKey = env_vars.get('GroqAPIKey')
+Username = env_vars.get("Username", "User")
+AssistantName = env_vars.get("AssistantName", "EcoAI")
+GroqAPIKey = env_vars.get("GroqAPIKey")
 
-# initialize the groq client using the porvided API key
-client = Groq(api_key = GroqAPIKey)
+client = Groq(api_key=GroqAPIKey)
 
-# initialize an empty list to store the message
-messages = []
+CHATLOG_PATH = "Data/ChatLog.json"
+chatlog_lock = threading.Lock()
 
-# define a system message that provides context to the AI chatbot about the role and behaviour
-System = f"""Hello, I am {Username}. You are a highly accurate and advanced AI voice assistant named {AssistantName}, specialized in answering questions related to the environment, climate, nature, sustainability, pollution, renewable energy, wildlife, and environmental protection.
-You have access to real-time, up-to-date information from the internet.
-***if the user asks what you can do, then you have to say that you can reply to general query, realtime query, automate the system like controlling the volume, opening and closing apps, writing content, and generate images etc.***
-***Always talk to the user in a friendly way.***
-***Do not tell the time unless I explicitly ask.***
-***Keep responses short, clear, and to the point.***
-***Always reply in English, even if the question is asked in Hindi.***
-***Do not provide notes, explanations about yourself, or mention training data.***
-***Answer only the question, with priority given to environmental awareness and eco-friendly perspectives.***
+# ===============================
+# OPTIMIZED SYSTEM PROMPTS
+# ===============================
+BASE_SYSTEM_PROMPT = f"""You are {AssistantName}, a professional AI assistant.
+your features are: answering to general and realtime query, system automation, image generation, write content like letters, creating ppt, taking screenshots and finally recording screen
+
+Rules:
+- You are a female assistant
+- Answer ONLY the user's query with precision
+- Be concise for simple questions (1-3 sentences)
+- Be detailed for complex topics (as needed)
+- Use natural, conversational language
+- For translations: use modern versions, no romanization
+- Match the user language. If the user speak to you in hindi then respond in hindi.. if they speaks in spanish, respond in spanish
+- No mentions of training data, APIs, or limitations
+- if user asks something about you then respond to them according to their queries
+- If user replies in romanized version of a language then reply in original version.. eg: if user speaks to you in hinglish then talk to them in Hindi
+- If user ask who creatd yopu then you have to say that Vaibhav have created you professionally and patiently
+- IMPORTANT FOR SPEECH OUTPUT: NEVER use numbered lists (1., 2., 3.), bullet points (-, *, •), or markdown **bold**, *italic*, __underline__. Always write in smooth, flowing natural sentences or short paragraphs. No formatting symbols at all.
+- If User's query is about then you have to be a professional coder and think rationally about everything
 """
 
-# a list of system instructions for the chatbot
-SystemChatBot = [
-    {'role':'system','content':System}
-]
+# ENVIRONMENT_SYSTEM_PROMPT = """ENVIRONMENT/SUSTAINABILITY QUERY DETECTED
 
-# attempt to load the chatlog from the JSON file
-try:
-    with open(r'Data/ChatLog.json', 'r') as f:
-        message = load(f) # load existing message from chatlog
+# Response format:
+# - Detailed scientific explanation (8-12 lines)
+# - Clear causes and effects
+# - Real-world impact and relevance
+# - Professional scientific language
+# - Suitable for science exhibition
+# - NO emojis or casual language
+# - Write in flowing paragraphs — no numbered or bulleted lists, no **bold** or markdown."""
 
-except FileNotFoundError:
-    # if the file does not exist, create an empty json file
-    with open(r'Data/ChatLog.json', 'w') as f:
+# ===============================
+# ENHANCED CHAT LOG MANAGEMENT
+# ===============================
+if not os.path.exists("Data"):
+    os.makedirs("Data")
+
+if not os.path.exists(CHATLOG_PATH):
+    with open(CHATLOG_PATH, "w") as f:
         dump([], f)
 
-# function to get realtime date and time
+def load_chatlog():
+    with chatlog_lock:
+        try:
+            with open(CHATLOG_PATH, "r") as f:
+                messages = load(f)
+            if len(messages) > 20:
+                messages = messages[-20:]
+                with open(CHATLOG_PATH, "w") as f:
+                    dump(messages, f, indent=2)
+            return messages
+        except Exception as e:
+            print(f"Error loading chatlog: {e}")
+            return []
+
+def save_chatlog(messages):
+    with chatlog_lock:
+        try:
+            if len(messages) > 20:
+                messages = messages[-20:]
+            with open(CHATLOG_PATH, "w") as f:
+                dump(messages, f, indent=2)
+        except Exception as e:
+            print(f"Error saving chatlog: {e}")
+
+# ===============================
+# REALTIME INFO (CACHED)
+# ===============================
+_info_cache = None
+_info_cache_time = 0
+INFO_CACHE_DURATION = 60
+
 def RealtimeInformation():
-    current_date_time = datetime.datetime.now() # get the current date and time
-    day = current_date_time.strftime('%A') # day of the week
-    date = current_date_time.strftime('%d') # date of the month
-    month = current_date_time.strftime('%B') # full month name
-    year = current_date_time.strftime('%Y') # year
-    hour = current_date_time.strftime('%H') # hour
-    minute = current_date_time.strftime('%M') # minute
-    second = current_date_time.strftime('%S') # Second
-
-    # format the information into a string
-    data = f'Please use this real-time information if needed,\n'
-    data += f'Day: {day}\nDate: {date}\nMonth: {month}\nYear: {year}\n'
-    data += f'Time: {hour} Hours: {minute} Minutes: {second} Seconds\n'
-    return data
-
-# main chatbot function to handle user query
-def ChatBot(Query):
-    """This function sends the user's query to the chatbot and returns the AI response"""
-    try:
-        with open(r'Data/ChatLog.json', 'r') as f:
-            messages = load(f)
-        # append user's query to the message list
-        messages.append({'role':'user','content':f'{Query}'})
-        # make a request to the groq api for a response
-        completion = client.chat.completions.create(
-            model = 'llama-3.3-70b-versatile', # ai model to use
-            messages = SystemChatBot+[{'role':'system','content':RealtimeInformation()}]+messages,# include system instructions, reaktime information and chat history
-            max_tokens = 8192, # limit the max tokens in the response
-            temperature = 0.7,
-            top_p = 1, # use nucleus sampling to control diversity
-            stream = True, # enable streaming response
-            stop = None # allow the model to determine when to stop
-        )
-
-        Answer = "" # initialize an empty string to store the AI response
-
-        # process the stream response chunks
-        for chunk in completion:
-            if chunk.choices[0].delta.content: #check if there is content in current chunk
-                Answer += chunk.choices[0].delta.content # append the content to the answer
-
-        Answer = Answer.replace("</s>", "") # clear any unwanted tokens from the response
-        # append the chatbot's response to the message list
-        messages.append({'role':'assistant','content': Answer})
-
-        # save the updated chatlog to the json file
-        with open(r'Data/ChatLog.json', 'w') as f:
-            dump(messages, f, indent = 4)
-
-        # return the response
-        return Answer
-        
-    except Exception as e:
-        # handle errors by printing the exception and resetting the chatlog
-        print(f'Error: {e}')
-        with open(r'Data/ChatLog.json', 'w') as f:
-            dump([], f, indent = 4)
-
-        return ChatBot(Query) # retry the query after resetting the log
+    global _info_cache, _info_cache_time
+    current_time = datetime.datetime.now().timestamp()
     
-# main entry point of the program
+    if _info_cache and (current_time - _info_cache_time) < INFO_CACHE_DURATION:
+        return _info_cache
+    
+    now = datetime.datetime.now()
+    _info_cache = (
+        f"Date: {now.strftime('%d %B %Y')}\n"
+        f"Day: {now.strftime('%A')}\n"
+        f"Time: {now.strftime('%H:%M:%S')}\n"
+    )
+    _info_cache_time = current_time
+    return _info_cache
+
+# ===============================
+# QUERY CLASSIFICATION (OPTIMIZED)
+# ===============================
+@lru_cache(maxsize=256)
+# def is_environment_query(query: str) -> bool:
+#     keywords = [
+#         "environment", "climate", "global warming", "pollution",
+#         "sustainability", "renewable", "ecosystem", "biodiversity",
+#         "carbon", "greenhouse", "solar", "wind energy", "plastic",
+#         "deforestation", "wildlife", "conservation", "nature",
+#         "ecology", "emissions", "fossil fuel", "ozone", "recycle"
+#     ]
+#     query_lower = query.lower()
+#     return any(keyword in query_lower for keyword in keywords)
+
+# ===============================
+# RESPONSE POST-PROCESSING
+# ===============================
+def clean_response(text: str) -> str:
+    text = re.sub(r"</s>", "", text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+    return text
+
+# ===============================
+# MAIN CHATBOT FUNCTION (OPTIMIZED)
+# ===============================
+def ChatBot(Query, use_streaming=True):
+    try:
+        messages = load_chatlog()
+        # env_query = is_environment_query(Query)
+        
+        system_messages = [
+            {"role": "system", "content": BASE_SYSTEM_PROMPT}
+        ]
+        
+        # if env_query:
+        #     system_messages.append(
+        #         {"role": "system", "content": ENVIRONMENT_SYSTEM_PROMPT}
+        #     )
+        
+        system_messages.append(
+            {"role": "system", "content": RealtimeInformation()}
+        )
+        
+        messages.append({"role": "user", "content": Query})
+        
+        # max_tokens = 2048 if env_query else 512
+        # temperature = 0.5 if env_query else 0.3
+        
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=system_messages + messages,
+            temperature=0.7,
+            max_tokens=8192,
+            stream=use_streaming,
+            top_p=0.9,
+        )
+        
+        answer = ""
+        if use_streaming:
+            for chunk in completion:
+                if chunk.choices[0].delta.content:
+                    answer += chunk.choices[0].delta.content
+        else:
+            answer = completion.choices[0].message.content
+        
+        answer = clean_response(answer)
+        
+        messages.append({"role": "assistant", "content": answer})
+        save_chatlog(messages)
+        
+        return answer
+    
+    except Exception as e:
+        error_msg = str(e).lower()
+        
+        if "rate" in error_msg or "limit" in error_msg:
+            print("⚠️ Rate limit reached, clearing chatlog and retrying...")
+            save_chatlog([])
+            try:
+                system_messages = [
+                    {"role": "system", "content": BASE_SYSTEM_PROMPT},
+                    {"role": "system", "content": RealtimeInformation()}
+                ]
+                completion = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=system_messages + [{"role": "user", "content": Query}],
+                    temperature=0.3,
+                    max_tokens=512,
+                    stream=False
+                )
+                return clean_response(completion.choices[0].message.content)
+            except Exception as retry_error:
+                return f"I'm experiencing high load right now. Please try again in a moment."
+        
+        elif "context" in error_msg or "token" in error_msg:
+            print("⚠️ Context too long, clearing chatlog...")
+            save_chatlog([])
+            return ChatBot(Query, use_streaming=False)
+        
+        else:
+            print(f"❌ Chatbot Error: {e}")
+            return "I apologize, but I encountered an error processing your request. Please try rephrasing your question."
+
+# ===============================
+# UTILITY FUNCTIONS
+# ===============================
+def clear_chat_history():
+    save_chatlog([])
+    print("🧹 Chat history cleared")
+
+def get_chat_stats():
+    messages = load_chatlog()
+    user_msgs = [m for m in messages if m.get('role') == 'user']
+    assistant_msgs = [m for m in messages if m.get('role') == 'assistant']
+    return {
+        'total_messages': len(messages),
+        'user_messages': len(user_msgs),
+        'assistant_messages': len(assistant_msgs),
+        'last_query': user_msgs[-1]['content'] if user_msgs else None
+    }
+
+# ===============================
+# BATCH PROCESSING
+# ===============================
+def batch_chat(queries: list):
+    responses = []
+    for query in queries:
+        response = ChatBot(query, use_streaming=False)
+        responses.append({
+            'query': query,
+            'response': response
+        })
+    return responses
+
+# ===============================
+# CLI ENTRY POINT
+# ===============================
 if __name__ == "__main__":
+    print(f"{'='*60}")
+    print(f"  {AssistantName} Enhanced Chatbot")
+    print(f"  User: {Username}")
+    print(f"{'='*60}\n")
+    
+    print("Commands:")
+    print("  - Type your question/query")
+    print("  - 'clear' to clear chat history")
+    print("  - 'stats' to view statistics")
+    print("  - 'exit' to quit\n")
+    
     while True:
-        user_input = input(">>> ") # prompt the user for input
-        print(ChatBot(user_input)) # call the chatbot function and print its response
+        try:
+            user_input = input(f"{Username} >>> ").strip()
+            if not user_input:
+                continue
+            if user_input.lower() == 'exit':
+                print("Goodbye!")
+                break
+            if user_input.lower() == 'clear':
+                clear_chat_history()
+                continue
+            if user_input.lower() == 'stats':
+                stats = get_chat_stats()
+                print(f"\n📊 Chat Statistics:")
+                for key, value in stats.items():
+                    print(f"  {key}: {value}")
+                print()
+                continue
+            print(f"\n{AssistantName} >>> ", end='', flush=True)
+            response = ChatBot(user_input)
+            print(response + "\n")
+        except KeyboardInterrupt:
+            print("\n\nGoodbye!")
+            break
+        except Exception as e:
+            print(f"\nError: {e}\n")
