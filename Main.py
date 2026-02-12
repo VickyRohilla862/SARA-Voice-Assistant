@@ -1,161 +1,443 @@
-from Frontend.GUI import GraphicalUserInterface, SetAssistantStatus, ShowTextToScreen, TempDirPath, SetMicrophoneStatus, QueryModifier, GetMicrophoneStatus, GetAssistantStatus
-from Backend.Model import FirstLayerDMM
-from Backend.RealtimeSearchEngine import RealtimeSearchEngine
-from Backend.Automation import Automation
-from Backend.SpeechToText import SpeechRecognition
-from Backend.Chatbot import ChatBot
-from Backend.TextToSpeech import TextToSpeech
-from dotenv import dotenv_values
-from asyncio import run
-from time import sleep
-import subprocess
-import threading
-import json
+"""
+SARA - Smart Automated Response Assistant
+With lazy imports + optimizations + FIXED IMAGE GENERATION INTEGRATION
+"""
+import re
+import shutil
+import webbrowser
 import os
+import sys
+import time
+import threading
+import subprocess
+from pathlib import Path
+from dotenv import dotenv_values
+from datetime import datetime
+from Backend.TextToSpeech import TextToSpeech, StopTTS
+from Backend.SpeechToText import get_interrupt_query, clear_interrupt_queue, start_interrupt_detection, stop_interrupt_detection
+from Backend.TextToSpeech import StopTTS
+from Frontend.GUI import SetAssistantStatus
+from Backend.System_Automation import SystemAutomation
+from Backend.Chatbot import ChatBot
+from Backend.RealtimeSearchEngine import RealtimeSearchEngine
+from Frontend.GUI import ShowTextToScreen, SetAssistantStatus
+from Backend.TextToSpeech import StopTTS
+from Backend.SpeechToText import (
+        SpeechRecognition, HotwordDetection, calibrate_microphone,
+        start_interrupt_detection, stop_interrupt_detection,
+        get_interrupt_query, clear_interrupt_queue
+    )
+from Frontend.GUI import GraphicalUserInterface, ShowTextToScreen, SetAssistantStatus
+from Backend.Model import FirstLayerDMM
+from Backend.TextToSpeech import StopTTS
+from Frontend.GUI import GraphicalUserInterface
+
+# ==========================================
+# IMPORT IMAGE GENERATION MODULE
+# ==========================================
+from Backend.ImageGeneration import GenerateImages
+
 env_vars = dotenv_values('.env')
-Username = env_vars.get('Username')
-AssistantName = env_vars.get('AssistantName')
-DefaultMessage = f'''{Username}: Hello {AssistantName}, How are you?
-{AssistantName}: Welcome {Username}. I am doing well. How may I help you? Do you need anything to know about Environment? Whatever it is. I am always here to help you.'''
-subprocess = []
-Functions = ['open', 'close', 'play', 'system', 'content', 'google search', 'youtube search']
+AssistantName = env_vars.get('AssistantName', 'SARA')
+Username = env_vars.get('Username', 'User')
 
-def ShowDefaultChatIfNoChats():
-    File = open(r'Data/ChatLog.json', 'r', encoding = 'utf-8')
-    if len(File.read())<5:
-        with open(rf'{TempDirPath}/Database.data', 'w', encoding = 'utf-8') as file:
-            file.write("")
+Path("Data").mkdir(exist_ok=True)
+Path("Frontend/Files").mkdir(parents=True, exist_ok=True)
 
-        with open(rf'{TempDirPath}/Responses.data', 'w', encoding = 'utf-8') as file:
-            file.write(DefaultMessage)
+TEMP_DIR = "Frontend/Files"
+for file_name, default_content in [
+    ("Mic.data", "False"),
+    ("Status.data", "Idle"),
+    ("Responses.data", ""),
+    ("ImageGeneration.data", "False,False"),
+    ("snap.data", ""),
+    ("snapped_apps.data", "")
+]:
+    file_path = Path(TEMP_DIR) / file_name
+    if not file_path.exists():
+        file_path.write_text(default_content)
 
-def ReadChatLogJson():
-    with open(r'Data/ChatLog.json', 'r', encoding = 'utf-8') as file:
-        chatlog_data = json.load(file)
-    return chatlog_data
+exit_signal = Path(TEMP_DIR) / "exit.signal"
+if exit_signal.exists():
+    exit_signal.unlink()
 
-def ChatLogIntegration():
-    json_data = ReadChatLogJson()
-    formatted_chatlog = ""
-    for entry in json_data:
-        if entry['role'] == 'user':
-            formatted_chatlog += f"User: {entry['content']}\n"
-        elif entry['role'] == 'assistant':
-            formatted_chatlog += f"Assistant: {entry['content']}\n"
+(Path(TEMP_DIR) / "Status.data").write_text("")
+(Path(TEMP_DIR) / "Mic.data").write_text("")
+(Path(TEMP_DIR) / "Responses.data").write_text("")
 
-    formatted_chatlog = formatted_chatlog.replace('User', Username+" ")
-    formatted_chatlog = formatted_chatlog.replace('Assistant', AssistantName+" ")
-    with open(rf'{TempDirPath}/Database.data', 'w', encoding = 'utf-8') as file:
-        file.write(formatted_chatlog) 
+print(f"🚀 Initializing {AssistantName}...")
 
-def ShowChatsOnGUI():
-    File = open(rf'{TempDirPath}/Database.data', 'r', encoding = 'utf-8')
-    Data = File.read()
-    if len(str(Data)) > 0:
-        lines = Data.split('\n')
-        results = '\n'.join(lines)
-        File.close()
-        File = open(rf'{TempDirPath}/Responses.data', 'w', encoding = 'utf-8')
-        File.write(results)
-        File.close()
+exit_lock = threading.Lock()
+should_exit = False
+is_speaking = False
+last_activity_time = time.time()
+is_conversation_active = False
+has_greeted_once = False
 
-def InitialExecution():
-    SetMicrophoneStatus("False")
-    ShowTextToScreen("")
-    ShowDefaultChatIfNoChats()
-    ChatLogIntegration()
-    ShowChatsOnGUI()
+# Lazy-loaded modules will be imported inside functions
 
-InitialExecution()
-
-def MainExecution():
-    TaskExecution = False
-    ImageExecution = False
-    ImageGenerationQuery = ""
-    SetAssistantStatus("Listening...")
-    Query = SpeechRecognition()
-    ShowTextToScreen(f'{Username}: {Query}')
-    SetAssistantStatus("Thinking...")
-    Decision = FirstLayerDMM(Query)
-    print("")
-    print(f'Decision: {Decision}')
-    print("")
-    G = any([i for i in Decision if i.startswith('general')])
-    R = any([i for i in Decision if i.startswith('realtime')])
-    Merged_Query = " and ".join([" ".join(i.split()[1:]) for i in Decision if i.startswith('general') or i.startswith('realtime')])
-    for queries in Decision:
-        if 'generate' in queries:
-            ImageGenerationQuery = str(queries)
-            ImageExecution =True
-
-    for queries in Decision:
-        if TaskExecution == False:
-            if any(queries.startswith(func) for func in Functions):
-                run(Automation(list(Decision)))
-                TaskExecution = True
-
-    if ImageExecution == True:
-        with open(r'Frontend/Files/ImageGeneration.data', 'w') as file:
-            file.write(f'{ImageGenerationQuery},True')
-
-        try:
-            p1 = subprocess.Popen(['python', r'Backend/ImageGeneration.py'], stdout = subprocess.PIPE, stderr = subprocess.PIPE, stdin = subprocess.PIPE, shell = False)
-            subprocess.append(p1)
-        except Exception as e:
-            print(f'Error Starting ImageGeneration.py: {e}')
-    
-    if G and R:
-        SetAssistantStatus('Searching...')
-        Answer = RealtimeSearchEngine(QueryModifier(Merged_Query))
-        ShowTextToScreen([f"{AssistantName}: {Answer}"])
-        SetAssistantStatus("Answering...")
-        TextToSpeech(Answer)
+def check_exit_signal():
+    if (Path(TEMP_DIR) / "exit.signal").exists():
+        (Path(TEMP_DIR) / "exit.signal").unlink()
         return True
+    return False
+
+def get_mic_status():
+    try:
+        return (Path(TEMP_DIR) / "Mic.data").read_text().strip() == "True"
+    except:
+        return False
+
+def set_mic_status(status: bool):
+    try:
+        (Path(TEMP_DIR) / "Mic.data").write_text("True" if status else "False")
+    except:
+        pass
+
+def cleanup_and_exit():
+    global should_exit, is_speaking
+    print("\n🛑 Shutting down...")
+    with exit_lock:
+        should_exit = True
+        is_speaking = False
     
-    else:
-        for queries in Decision:
-            if 'general' in queries:
-                SetAssistantStatus("Thinking...")
-                QueryFinal = queries.replace('general ', '')
-                Answer = ChatBot(QueryModifier(QueryFinal))
-                ShowTextToScreen(f'{AssistantName}: {Answer}')
-                SetAssistantStatus("Answering...")
-                TextToSpeech(Answer)
-                return True
-            
-            elif 'realtime' in queries:
-                SetAssistantStatus("Searching...")
-                QueryFinal = queries.replace('realtime ', '')
-                Answer = ChatBot(QueryModifier(QueryFinal))
-                ShowTextToScreen(f'{AssistantName}: {Answer}')
-                SetAssistantStatus("Answering...")
-                TextToSpeech(Answer)
-                return True
-            
-            elif 'exit' in queries:
-                QueryFinal = f'Okay Bye {Username}. I will be here if you need help in anything. Especially in topics related to environment'
-                Answer = ChatBot(QueryModifier(QueryFinal))
-                ShowTextToScreen(f'{AssistantName}: {Answer}')
-                TextToSpeech(Answer)
-                SetAssistantStatus("Answering...")
-                os._exit(1)
+    # Lazy import here
+    
+    StopTTS()
+    SetAssistantStatus("Shutting down...")
+    set_mic_status(False)
+    sys.exit(0)
 
-def FirstThread():
-    while True:
-        CurrentStatus = GetMicrophoneStatus()
-        if CurrentStatus == 'True':
-            MainExecution()
-        else:
-            AIStatus = GetAssistantStatus()
-            if 'Available...' in AIStatus:
-                sleep(0.1)
+def speak_with_interrupt(text):
+    global is_speaking, last_activity_time
+    
+    if not text or not text.strip():
+        return None
+    
+    with exit_lock:
+        is_speaking = True
+        clear_interrupt_queue()
+    
+    start_interrupt_detection()
+    
+    try:
+        interrupt_query = TextToSpeech(text, lambda: is_speaking, lambda: get_interrupt_query())
+        last_activity_time = time.time()
+        return interrupt_query
+    finally:
+        with exit_lock:
+            is_speaking = False
+        stop_interrupt_detection()
+
+# ==========================================
+# ENHANCED IMAGE PROMPT EXTRACTION
+# ==========================================
+def extract_image_prompt(query: str) -> str:
+    query = query.lower().strip().rstrip(".?!")
+
+    patterns = [
+        r"(?:generate|create|make|draw)\s+(?:an?\s+)?(?:image|picture|photo|drawing)\s+(?:of|for|about)?\s*(.+)"
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, query)
+        if match:
+            return match.group(1).strip()
+
+    return query
+
+
+# ==========================================
+# TASK EXECUTION WITH FIXED IMAGE GENERATION
+# ==========================================
+def execute_task(task: str, query: str):
+    global last_activity_time
+    
+    task_lower = task.lower().strip()
+    
+    # Lazy imports inside function
+    
+    automation = SystemAutomation()
+    
+    try:
+        if task_lower == "exit":
+            response = f"Goodbye {Username}!"
+            ShowTextToScreen(response)
+            speak_with_interrupt(response)
+            cleanup_and_exit()
+            return None
+        
+        # ==========================================
+        # IMAGE GENERATION (DIRECT CALL)
+        # ==========================================
+        elif task_lower.startswith("generate image"):
+
+            prompt = task_lower.replace("generate image", "").strip()
+
+            if not prompt:
+                response = "Please tell me what image to generate."
+                ShowTextToScreen(response)
+                return speak_with_interrupt(response)
+
+            print(f"🎨 Generating image for: {prompt}")
+
+            ShowTextToScreen(f"Generating image: {prompt}")
+            speak_with_interrupt(f"Generating image of {prompt}")
+
+            try:
+                # DIRECT CALL to your ImageGeneration.py
+                GenerateImages(prompt)
+                response = "Image generated successfully."
+            except Exception as e:
+                print("Image generation error:", e)
+                response = "Image generation failed."
+
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        # ==========================================
+        # PRESENTATION CREATION
+        # ==========================================
+        elif task_lower.startswith("content presentation") and "presentation" in task_lower:
+            topic = task.replace("content presentation", "").replace(" presentation", "").strip()
+            ShowTextToScreen(f"Creating presentation on: {topic}")
+            speak_with_interrupt(f"Creating a presentation on {topic}.")
+            response = automation.create_presentation(topic)
+            ShowTextToScreen(response)
+            return speak_with_interrupt("Presentation created successfully.")
+        
+        # ==========================================
+        # CONTENT WRITING (LETTERS, NOTES, ETC)
+        # ==========================================
+        elif task_lower.startswith("content "):
+            # Handle writing content like letters
+            parts = task.replace("content ", "").strip().split(" ", 1)
+            content_type = parts[0] if len(parts) > 1 else "letter"
+            topic = parts[1] if len(parts) > 1 else parts[0]
+            ShowTextToScreen(f"Writing {content_type} on: {topic}")
+            speak_with_interrupt(f"Writing a {content_type} on {topic}.")
+            response = automation.write_content(topic, content_type)
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        # ==========================================
+        # APP MANAGEMENT
+        # ==========================================
+        elif task.startswith("open "):
+            app_name = task.replace("open ", "").strip()
+            result = automation.open_app(app_name)
+            if isinstance(result, dict):
+                ShowTextToScreen(result["display"])
+                TextToSpeech(result["speech"])
             else:
-                SetAssistantStatus('Available...')
+                ShowTextToScreen(result)
+                TextToSpeech(result)
+        
+        elif task_lower.startswith("close "):
+            app = task.replace("close ", "").strip()
+            ShowTextToScreen(f"Closing: {app}")
+            response = automation.close_app(app)
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        # ==========================================
+        # MEDIA PLAYBACK & SEARCH
+        # ==========================================
+        elif task_lower.startswith("play "):
+            topic = task.replace("play ", "").strip()
+            ShowTextToScreen(f"Playing: {topic}")
+            response = automation.play_on_youtube(topic)
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        elif task_lower.startswith("google search "):
+            search_query = task.replace("google search ", "").strip()
+            ShowTextToScreen(f"Searching Google for: {search_query}")
+            response = automation.google_search(search_query)
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        elif task_lower.startswith("youtube search "):
+            search_query = task.replace("youtube search ", "").strip()
+            ShowTextToScreen(f"Searching YouTube for: {search_query}")
+            response = automation.youtube_search(search_query)
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        # ==========================================
+        # SYSTEM COMMANDS
+        # ==========================================
+        elif task_lower.startswith("system "):
+            sys_cmd = task.replace("system ", "").strip().lower()
+            if "set to" in sys_cmd:
+                level = sys_cmd.replace("set to ", "").strip()
+                ShowTextToScreen(f"Setting volume to: {level}")
+                response = automation.set_volume(level)
+            elif "mute" in sys_cmd:
+                ShowTextToScreen("Muting volume")
+                response = automation.mute_volume()
+            elif "unmute" in sys_cmd:
+                ShowTextToScreen("Unmuting volume")
+                response = automation.unmute_volume()
+            elif "screenshot" in sys_cmd or "take screenshot" in sys_cmd:
+                ShowTextToScreen("Taking screenshot")
+                response = automation.take_screenshot()
+            elif "record" in sys_cmd or "start screen recording" in sys_cmd:
+                ShowTextToScreen("Starting screen recording")
+                response = automation.start_screen_recording()
+            else:
+                response = "Unknown system command."
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        elif task_lower.startswith("run "):
+            cmd = task.replace("run ", "").strip()
+            ShowTextToScreen(f"Running command: {cmd}")
+            # Assuming System_Automation has a run_command method; if not, implement or use subprocess
+            try:
+                subprocess.run(cmd, shell=True)
+                response = f"Executed command: {cmd}"
+            except Exception as e:
+                response = f"Error executing command: {str(e)}"
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+        
+        # ==========================================
+        # CHATBOT & REALTIME SEARCH
+        # ==========================================
+        elif task_lower.startswith("general "):
+            q = task.replace("general ", "").strip()
+            ShowTextToScreen(f"Processing: {q}")
+            response = ChatBot(q)
+            ShowTextToScreen(response)  # Then update GUI
+            interrupt = speak_with_interrupt(response)  # Speak first
+            return interrupt
+        
+        elif task_lower.startswith("realtime "):
+            q = task.replace("realtime ", "").strip()
+            ShowTextToScreen(f"Searching realtime: {q}")
+            response = RealtimeSearchEngine(q)
+            ShowTextToScreen(response)  # Then update GUI
+            interrupt = speak_with_interrupt(response)  # Speak first
+            return interrupt
+        
+        # ==========================================
+        # DEFAULT: CHATBOT
+        # ==========================================
+        else:
+            response = ChatBot(query)
+            ShowTextToScreen(response)
+            return speak_with_interrupt(response)
+            
+    except Exception as e:
+        msg = f"Error: {str(e)}"
+        print(f"❌ {msg}")
+        ShowTextToScreen(msg)
+        return speak_with_interrupt("Sorry, something went wrong.")
 
-def SecondThread():
-    GraphicalUserInterface()
+def assistant_loop():
+    global should_exit, last_activity_time, is_conversation_active, has_greeted_once
+    
+    if check_exit_signal():
+        cleanup_and_exit()
+    
+    print(f"✅ {AssistantName} ready!")
+    
+    # Lazy imports
+    
+    
+    try:
+        calibrate_microphone()
+    except Exception as e:
+        print(f"Mic calibration failed: {e}")
+    
+    while not should_exit:
+        try:
+            if check_exit_signal():
+                cleanup_and_exit()
+                break
+            
+            if get_mic_status():
+                if time.time() - last_activity_time > 10:
+                    SetAssistantStatus("💤 Standby...")
+                    set_mic_status(False)
+                    is_conversation_active = False
+                    clear_interrupt_queue()
+                    continue
+            
+            if not get_mic_status():
+                SetAssistantStatus(f"Say 'Ok {AssistantName}'...")
+                activated = HotwordDetection()
+                
+                if activated:
+                    set_mic_status(True)
+                    is_conversation_active = True
+                    last_activity_time = time.time()
+                    
+                    if not has_greeted_once:
+                        greeting = f"Hello {Username}! How can i help you today?"
+                        ShowTextToScreen(greeting)
+                        speak_with_interrupt(f"Hello {Username}. How can i help you today?")
+                        has_greeted_once = True
+                
+                continue
+            
+            SetAssistantStatus("🎤 Listening...")
+            query = SpeechRecognition(timeout=5, phrase_limit=10)  # Increased phrase_limit
+            
+            if not query or not query.strip():
+                time.sleep(0.03)
+                continue
+            
+            last_activity_time = time.time()
+            StopTTS()
+            
+            print(f"\n🗣️ User: {query}")
+            ShowTextToScreen(f"You: {query}")
+            
+            SetAssistantStatus("🧠 Processing...")
+            tasks = FirstLayerDMM(query)
+            
+            print(f"🎯 Tasks: {tasks}")
+            
+            # In Main.py -> assistant_loop
+
+            for task in tasks:
+                if should_exit:
+                    break
+                # FIX: Pass 'task' as both the intent and the specific query for that task
+                # This prevents the execution from falling back to the full original 'query'
+                interrupt = execute_task(task, task) 
+                
+                if interrupt:
+                    new_tasks = FirstLayerDMM(interrupt)
+                    for nt in new_tasks:
+                        execute_task(nt, nt)
+                    break
+                time.sleep(0.08)
+            
+            clear_interrupt_queue()
+            time.sleep(0.03)
+        
+        except KeyboardInterrupt:
+            cleanup_and_exit()
+        except Exception as e:
+            print(f"Loop error: {e}")
+            time.sleep(0.4)
+
+def main():
+    print("="*60)
+    print(f"  {AssistantName} - Optimized Version (Image Gen Fixed)")
+    print("="*60 + "\n")
+    
+    assistant_thread = threading.Thread(target=assistant_loop, daemon=True)
+    assistant_thread.start()
+    
+    try:
+        
+        GraphicalUserInterface()
+    except KeyboardInterrupt:
+        cleanup_and_exit()
 
 if __name__ == "__main__":
-    thread2 = threading.Thread(target = FirstThread, daemon = True)
-    thread2.start()
-    SecondThread()
+    main()
