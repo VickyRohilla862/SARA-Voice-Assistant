@@ -1,6 +1,6 @@
 <div align="center">
 <br><br>
-   <img src="https://readme-typing-svg.demolab.com?font=IBM+Plex+Sans&size=40&pause=1300&color=0088ff&center=true&vCenter=true&width=700&lines=SARA+Voice+Assistant;Smart+Automated+Response+Assistant" alt="SARA Animated Title" />
+   <img src="https://readme-typing-svg.demolab.com?font=IBM+Plex+Sans&size=50&pause=1300&color=0088ff&center=true&vCenter=true&width=700&lines=SARA+Voice+Assistant;Smart+Automated+Response+Assistant" alt="SARA Animated Title" />
 <br>
 <br>
   <p>Smart Automated Response Assistant for Windows with voice, GUI, automation, realtime search, and image generation.</p>
